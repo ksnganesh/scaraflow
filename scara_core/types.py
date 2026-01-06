@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Any, Sequence, Optional
 
 Vector = Sequence[float]
 
@@ -14,7 +14,7 @@ class Document:
     id: str
     content: str
     metadata: dict[str, Any]
-    timestamp: datetime | None = None
+    timestamp: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -24,3 +24,4 @@ class QueryResult:
     """
     doc_id: str
     score: float
+    payload: Optional[dict[str, Any]] = None
