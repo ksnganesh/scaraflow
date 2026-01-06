@@ -1,6 +1,0 @@
-sentence-transformers
-qdrant-client
-langchain
-llama-index
-numpy
-tqdm
