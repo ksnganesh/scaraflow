@@ -1,0 +1,56 @@
+# -------------------------------
+# Python cache
+# -------------------------------
+__pycache__/
+*.py[cod]
+
+# -------------------------------
+# Virtual environments
+# -------------------------------
+.venv/
+venv/
+env/
+
+# -------------------------------
+# Build artifacts
+# -------------------------------
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# -------------------------------
+# Test / benchmark artifacts
+# -------------------------------
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+scaraflow_bench.csv
+testing/
+
+# -------------------------------
+# Jupyter / Colab
+# -------------------------------
+.ipynb_checkpoints/
+
+# -------------------------------
+# OS / editor noise
+# -------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# -------------------------------
+# Qdrant local storage
+# -------------------------------
+qdrant_data/
+.qdrant/
+storage/
+
+# -------------------------------
+# Environment files
+# -------------------------------
+.env
+.env.*
