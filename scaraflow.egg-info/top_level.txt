@@ -1,0 +1,3 @@
+scara_core
+scara_index
+scara_rag
