@@ -31,12 +31,15 @@ class QdrantVectorStore(VectorStore):
     Uses native Rust HNSW internally.
     """
 
-    def __init__(self, config: QdrantConfig):
+    def __init__(self, config: QdrantConfig, client: QdrantClient | None = None):
         self.config = config
-        self.client = QdrantClient(
-            url=config.url,
-            timeout=getattr(config, "timeout", 5.0),
-        )
+        if client:
+            self.client = client
+        else:
+            self.client = QdrantClient(
+                url=config.url,
+                timeout=getattr(config, "timeout", 5.0),
+            )
         self._ensure_collection()
 
     # ----------------------------
