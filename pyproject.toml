@@ -23,6 +23,7 @@ bench = [
     "sentence-transformers",
     "tqdm",
     "numpy",
+    "pytest",
 ]
 
 [project.urls]

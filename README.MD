@@ -2,39 +2,23 @@
 
 **Scaraflow** is a **retrieval-first RAG infrastructure** designed for **deterministic, production-grade Retrieval-Augmented Generation**.
 
-Scaraflow is not an agent framework, not a prompt playground, and not a demo SDK.  
+It is not an agent framework, a prompt playground, or a demo SDK.  
 It focuses on one thing and does it rigorously:
 
-> **Correct, explicit, and scalable retrieval for LLM systems**
+> **Correct, explicit, and scalable retrieval for LLM systems.**
 
 ---
 
-## Why Scaraflow
+## Why Scaraflow?
 
-Most RAG frameworks prioritize orchestration and abstraction.  
-Scaraflow prioritizes **retrieval correctness, predictability, and streaming readiness**.
+Most RAG frameworks prioritize orchestration and "magic" abstractions.  
+Scaraflow prioritizes **correctness, predictability, and infrastructure quality**.
 
-### Design principles
-- Retrieval before generation
-- Explicit contracts over magic
-- Deterministic behavior
-- Low-variance latency
-- Streaming-ready by design
-- Infrastructure consistency across dev, notebooks, and production
-
----
-
-## Architecture Overview
-
-```
-scaraflow/
-├── scara-core        # strict contracts & invariants
-├── scara-index       # vector store backends (Qdrant)
-├── scara-rag         # deterministic RAG engine
-├── scara-live        # streaming / temporal RAG (planned)
-├── scara-graph       # graph-based RAG (planned)
-└── scara-llm         # thin LLM adapters
-```
+### Core Design Principles
+1.  **Retrieval before Generation:** If the context is wrong, the answer is wrong. We treat retrieval as a strict database query, not a fuzzy search.
+2.  **Explicit Contracts:** No hidden prompts, no "auto-magic" context injection. You control exactly what goes into the LLM.
+3.  **Deterministic Behavior:** Given the same index and query, the result is predictable.
+4.  **Production Ready:** Includes rigorous validation, telemetry, and low-variance latency.
 
 ---
 
@@ -44,63 +28,69 @@ scaraflow/
 pip install scaraflow
 ```
 
-Scaraflow requires a **real vector database**.  
-The recommended backend is **Qdrant**.
+*Note: Scaraflow depends on `qdrant-client` and standard scientific stack libraries.*
 
 ---
 
-## Quick Start
+## Quick Start (Run in 30 Seconds)
 
-Scaraflow supports **three official setups**.
+The fastest way to try Scaraflow is with the **In-Memory** setup. No Docker or external database required.
 
----
-
-### Option 1 — Docker (Local Qdrant)
-
-```bash
-docker run -p 6333:6333 qdrant/qdrant
-```
+### 1. Create a script `demo.py`
 
 ```python
+import uuid
+from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 from scara_index.qdrant_store import QdrantVectorStore
 from scara_index.config import QdrantConfig
 from scara_rag.engine import RAGEngine
 from scara_rag.policies import RetrievalPolicy
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
-embedder = type("E", (), {"embed": lambda t: model.encode(t).tolist()})
-
+# 1. Setup Components
+# Use in-memory Qdrant for instant setup
+client = QdrantClient(":memory:")
 store = QdrantVectorStore(
-    QdrantConfig(
-        url="http://localhost:6333",
-        collection="quickstart",
-        vector_dim=384,
-    )
+    QdrantConfig(collection="demo", vector_dim=384),
+    client=client
 )
 
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+# Wrap embedder to match protocol
+class LocalEmbedder:
+    def embed(self, text):
+        return model.encode(text).tolist()
+
+embedder = LocalEmbedder()
+
+# 2. Initialize Engine
 rag = RAGEngine(
     embedder=embedder,
     store=store,
-    llm=lambda prompt: "Demo answer",
+    llm=lambda prompt: f"Generated answer based on: {len(prompt)} chars of context.",
 )
 
-texts = [
-    "Scaraflow is a retrieval-first RAG system.",
-    "Qdrant provides Rust-based HNSW indexing.",
+# 3. Index Data
+documents = [
+    "Scaraflow is a retrieval-first RAG infrastructure.",
+    "It prioritizes deterministic behavior and explicit contracts.",
+    "Qdrant is the recommended vector backend for Scaraflow.",
 ]
 
-vectors = model.encode(texts).tolist()
+vectors = model.encode(documents).tolist()
+ids = [str(uuid.uuid4()) for _ in documents]
 
 store.upsert(
-    ids=[0, 1],
+    ids=ids,
     vectors=vectors,
-    metadata=[{"src": "quickstart"} for _ in texts],
+    metadata=[{"content": doc} for doc in documents]
 )
 
+# 4. Query
 response = rag.query(
-    "What is Scaraflow?",
-    policy=RetrievalPolicy(top_k=2),
+    "What are the design principles of Scaraflow?",
+    policy=RetrievalPolicy(top_k=2)
 )
 
 print(response.answer)
@@ -113,9 +103,9 @@ print(response.answer)
 ```python
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
-from scara_index.qdrant_store import QdrantVectorStore
-from scara_index.config import QdrantConfig
-from scara_rag.engine import RAGEngine
+from scaraflow.scara_index.qdrant_store import QdrantVectorStore
+from scaraflow.scara_index.config import QdrantConfig
+from scaraflow.scara_rag.engine import RAGEngine
 
 client = QdrantClient(path="./qdrant_data")
 
@@ -147,13 +137,21 @@ print(rag.query("How does Scaraflow run locally?").answer)
 
 ---
 
-### Option 3 — Qdrant Cloud / Remote Qdrant
+## Production Setup (Docker / Cloud)
+
+For production, connect Scaraflow to a persistent Qdrant instance.
+
+```bash
+# Start Qdrant locally
+docker run -p 6333:6333 qdrant/qdrant
+```
 
 ```python
+# Connect to local Docker or Qdrant Cloud
 store = QdrantVectorStore(
     QdrantConfig(
-        url="https://YOUR_QDRANT_ENDPOINT",
-        collection="prod_collection",
+        url="http://localhost:6333", # or your Cloud URL
+        collection="prod_v1",
         vector_dim=384,
     )
 )
@@ -161,23 +159,50 @@ store = QdrantVectorStore(
 
 ---
 
-## Benchmarks
+## Architecture
 
-Scaraflow includes reproducible benchmarks measuring:
-
-- embedding time
-- indexing time
-- query latency (avg / p95)
-- variance
-
-Example (CPU, 10k docs):
+Scaraflow is modular by design.
 
 ```
-Embedding time: ~3.5s
-Index time:     ~2.1s
-Avg latency:    ~17ms
-P95 latency:    ~20ms
-Std dev:        low
+scaraflow/
+├── scara-core        # Protocols, types, and strict validators
+├── scara-index       # Vector store implementations (Qdrant)
+├── scara-rag         # The RAG Engine (retrieval, ranking, assembly)
+└── scara-llm         # Adapters for LLM providers
+```
+
+---
+
+## Benchmarks
+
+Scaraflow includes a built-in benchmarking suite to verify infrastructure performance.
+
+**Latest Run (10,000 Documents, CPU):**
+
+| Metric | Result |
+| :--- | :--- |
+| **Embedding Time** | ~24.5s (408 docs/s) |
+| **Indexing Time** | ~7.5s (1326 docs/s) |
+| **Avg Query Latency** | **80ms** |
+| **P95 Latency** | **140ms** |
+
+*Run benchmarks yourself:*
+```bash
+python benchmarks/run_benchmark.py
+```
+
+---
+
+## Development & Testing
+
+Scaraflow is tested against Python 3.9 through 3.12.
+
+```bash
+# Run test suite
+pytest tests/
+
+# Run validation checks
+pytest tests/test_validation.py
 ```
 
 ---
@@ -190,5 +215,4 @@ MIT License
 
 ## Author
 
-Built and maintained by **Ganesh (K. S. N. Ganesh)**  
-Focus: retrieval systems, streaming RAG, and infrastructure-grade AI tooling.
+Built and maintained by **Ganesh (K. S. N. Ganesh)**.
