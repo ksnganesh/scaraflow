@@ -63,10 +63,10 @@ docker run -p 6333:6333 qdrant/qdrant
 
 ```python
 from sentence_transformers import SentenceTransformer
-from scaraflow.scara_index.qdrant_store import QdrantVectorStore
-from scaraflow.scara_index.config import QdrantConfig
-from scaraflow.scara_rag.engine import RAGEngine
-from scaraflow.scara_rag.policies import RetrievalPolicy
+from scara_index.qdrant_store import QdrantVectorStore
+from scara_index.config import QdrantConfig
+from scara_rag.engine import RAGEngine
+from scara_rag.policies import RetrievalPolicy
 
 model = SentenceTransformer("all-MiniLM-L6-v2")
 embedder = type("E", (), {"embed": lambda t: model.encode(t).tolist()})
@@ -113,9 +113,9 @@ print(response.answer)
 ```python
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
-from scaraflow.scara_index.qdrant_store import QdrantVectorStore
-from scaraflow.scara_index.config import QdrantConfig
-from scaraflow.scara_rag.engine import RAGEngine
+from scara_index.qdrant_store import QdrantVectorStore
+from scara_index.config import QdrantConfig
+from scara_rag.engine import RAGEngine
 
 client = QdrantClient(path="./qdrant_data")
 
