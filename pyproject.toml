@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scaraflow"
-version = "0.1.5"
+version = "0.1.6"
 description = "Retrieval-first, deterministic RAG infrastructure"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -27,8 +27,8 @@ bench = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/YOUR_USERNAME/scaraflow"
-Repository = "https://github.com/YOUR_USERNAME/scaraflow"
+Homepage = "https://github.com/ksnganesh/scaraflow"
+Repository = "https://github.com/ksnganesh/scaraflow"
 
 [tool.setuptools.packages.find]
 where = ["."]
