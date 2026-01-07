@@ -1,5 +1,5 @@
 from itertools import islice
-from typing import Iterable, Optional
+from typing import Iterable
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -31,7 +31,7 @@ class QdrantVectorStore(VectorStore):
     Uses native Rust HNSW internally.
     """
 
-    def __init__(self, config: QdrantConfig, client: Optional[QdrantClient] = None):
+    def __init__(self, config: QdrantConfig, client: QdrantClient | None = None):
         self.config = config
         if client:
             self.client = client
@@ -144,8 +144,6 @@ class QdrantVectorStore(VectorStore):
             "no compatible query method found")
         return [
             QueryResult(
-                doc_id=str(hit.id),
-                score=float(hit.score),
-                payload=hit.payload,
-            ) for hit in hits
-        ]
+            doc_id=str(hit.id),
+            score=float(hit.score),)for hit in hits]
+

@@ -14,7 +14,7 @@ class Document:
     id: str
     content: str
     metadata: dict[str, Any]
-    timestamp: Optional[datetime] = None
+    timestamp: datetime | None = None
 
 
 @dataclass(frozen=True)

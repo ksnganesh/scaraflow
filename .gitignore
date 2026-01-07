@@ -27,7 +27,6 @@ coverage.xml
 htmlcov/
 .pytest_cache/
 scaraflow_bench.csv
-testing/
 dist/
 
 # -------------------------------
