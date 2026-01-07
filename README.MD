@@ -2,23 +2,38 @@
 
 **Scaraflow** is a **retrieval-first RAG infrastructure** designed for **deterministic, production-grade Retrieval-Augmented Generation**.
 
-It is not an agent framework, a prompt playground, or a demo SDK.  
-It focuses on one thing and does it rigorously:
+Scaraflow is not an agent framework, not a prompt playground, and not a demo SDK. It focuses on one thing and does it rigorously:
 
-> **Correct, explicit, and scalable retrieval for LLM systems.**
+> **Correct, explicit, and scalable retrieval for LLM systems**
 
 ---
 
-## Why Scaraflow?
+## Why Scaraflow
 
-Most RAG frameworks prioritize orchestration and "magic" abstractions.  
-Scaraflow prioritizes **correctness, predictability, and infrastructure quality**.
+Most RAG frameworks prioritize orchestration and abstraction. Scaraflow prioritizes **retrieval correctness, predictability, and streaming readiness**.
 
-### Core Design Principles
-1.  **Retrieval before Generation:** If the context is wrong, the answer is wrong. We treat retrieval as a strict database query, not a fuzzy search.
-2.  **Explicit Contracts:** No hidden prompts, no "auto-magic" context injection. You control exactly what goes into the LLM.
-3.  **Deterministic Behavior:** Given the same index and query, the result is predictable.
-4.  **Production Ready:** Includes rigorous validation, telemetry, and low-variance latency.
+## Design Principles
+
+*   **Retrieval before generation**
+*   **Explicit contracts over magic**
+*   **Deterministic behavior**
+*   **Low-variance latency**
+*   **Streaming-ready by design**
+*   **Infrastructure consistency across dev, notebooks, and production**
+
+---
+
+## Architecture Overview
+
+```
+scaraflow/
+├── scara-core        # strict contracts & invariants
+├── scara-index       # vector store backends (Qdrant)
+├── scara-rag         # deterministic RAG engine
+├── scara-live        # streaming / temporal RAG (planned)
+├── scara-graph       # graph-based RAG (planned)
+└── scara-llm         # thin LLM adapters (planned)
+```
 
 ---
 
@@ -103,9 +118,9 @@ print(response.answer)
 ```python
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
-from scaraflow.scara_index.qdrant_store import QdrantVectorStore
-from scaraflow.scara_index.config import QdrantConfig
-from scaraflow.scara_rag.engine import RAGEngine
+from scara_index.qdrant_store import QdrantVectorStore
+from scara_index.config import QdrantConfig
+from scara_rag.engine import RAGEngine
 
 client = QdrantClient(path="./qdrant_data")
 
@@ -159,50 +174,14 @@ store = QdrantVectorStore(
 
 ---
 
-## Architecture
-
-Scaraflow is modular by design.
-
-```
-scaraflow/
-├── scara-core        # Protocols, types, and strict validators
-├── scara-index       # Vector store implementations (Qdrant)
-├── scara-rag         # The RAG Engine (retrieval, ranking, assembly)
-└── scara-llm         # Adapters for LLM providers
-```
-
----
-
 ## Benchmarks
 
 Scaraflow includes a built-in benchmarking suite to verify infrastructure performance.
 
-**Latest Run (10,000 Documents, CPU):**
-
-| Metric | Result |
-| :--- | :--- |
-| **Embedding Time** | ~24.5s (408 docs/s) |
-| **Indexing Time** | ~7.5s (1326 docs/s) |
-| **Avg Query Latency** | **80ms** |
-| **P95 Latency** | **140ms** |
-
-*Run benchmarks yourself:*
-```bash
-python benchmarks/run_benchmark.py
-```
-
----
-
-## Development & Testing
-
-Scaraflow is tested against Python 3.9 through 3.12.
+Benchmarks can be run using:
 
 ```bash
-# Run test suite
-pytest tests/
-
-# Run validation checks
-pytest tests/test_validation.py
+python testing/benchmarks.py
 ```
 
 ---
