@@ -175,6 +175,31 @@ store = QdrantVectorStore(
 ---
 
 ## Benchmarks
+Generating 10000 synthetic documents...
+Benchmarking Embedding Time (SentenceTransformer)...
+Embedding Time: 34.9234s (286.3 docs/s)
+
+--- Scaraflow Benchmark ---
+Indexing Time: 9.9117s
+[Scaraflow] Avg: 112.96ms, P95: 165.32ms, Std: 47.31ms
+
+--- LangChain Benchmark ---
+Indexing Time: 13.0563s
+[LangChain] Avg: 134.25ms, P95: 189.02ms, Std: 39.40ms
+
+--- LlamaIndex Benchmark ---
+LLM is explicitly disabled. Using MockLLM.
+Indexing Time: 8.9368s
+[LlamaIndex] Avg: 118.87ms, P95: 167.79ms, Std: 43.85ms
+
+======================================================================
+Framework       | Index (s)  | Avg Lat (ms) | P95 (ms)   | Std (ms)  
+----------------------------------------------------------------------
+Scaraflow       | 9.9117     | 112.96       | 165.32     | 47.31     
+LangChain       | 13.0563    | 134.25       | 189.02     | 39.40     
+LlamaIndex      | 8.9368     | 118.87       | 167.79     | 43.85     
+======================================================================
+Embedding Time (common): 34.9234s
 
 Scaraflow includes a built-in benchmarking suite to verify infrastructure performance.
 
