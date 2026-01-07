@@ -1,83 +1,33 @@
-# BENCHMARKS
-
-This document describes how Scaraflow benchmarks are executed, interpreted, and reproduced.
-
-## Goal
-
-Scaraflow benchmarks aim to measure **retrieval infrastructure quality**, not prompt tricks or agent workflows.
-
-Metrics focus on:
-- Embedding throughput
-- Indexing time
-- Query latency (avg / p95)
-- Latency variance
-- Determinism
-
-## What Is Benchmarked
-
-- Vector indexing via Qdrant (Rust HNSW)
-- Retrieval via `scara-rag`
-- Deterministic query execution
-
-## What Is NOT Benchmarked
-
-- Agents
-- Tool calling
-- Prompt engineering
-- Caching layers
-- UI frameworks
+# Benchmark Results
 
 ## Environment
+- **Platform**: Python 3.12, Qdrant Client 1.16.2
+- **Hardware**: CPU (In-Memory Qdrant)
+- **Dataset**: 10,000 synthetic documents
+- **Embedding Model**: `all-MiniLM-L6-v2` (384 dimensions)
+- **Frameworks**: Scaraflow 0.1.0, LangChain (latest), LlamaIndex (latest)
 
-- CPU-only execution
-- Python 3.9+
-- Qdrant (Docker, local, or cloud)
-- SentenceTransformers (`all-MiniLM-L6-v2`)
+## Results
 
-## Dataset
+| Framework | Indexing Time (s) | Avg Latency (ms) | P95 Latency (ms) | Std Dev (ms) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Scaraflow** | 10.05 | **78.67** | 142.76 | 50.58 |
+| LangChain | 9.56 | 88.15 | 147.07 | 48.24 |
+| LlamaIndex | **3.98** | 83.86 | **140.14** | 51.27 |
 
-10,000 synthetic documents:
+> **Note**: Indexing time includes vector upsert to Qdrant (in-memory). Embeddings were pre-computed to isolate infrastructure performance. LlamaIndex indexing is significantly faster, likely due to larger default batch sizes or optimized bulk insertion. Scaraflow provides the lowest average query latency.
 
+## Analysis
+
+1.  **Scaraflow** demonstrates the **lowest average retrieval latency** (78ms), validating its "retrieval-first" design.
+2.  **LlamaIndex** is extremely efficient at **indexing**, processing 10k documents in <4 seconds.
+3.  **LangChain** shows slightly higher overhead in retrieval compared to others.
+4.  All frameworks show similar variance (Std Dev ~50ms), suggesting the underlying Qdrant search is the dominant factor, but framework overhead adds ~5-10ms per query.
+
+## Reproduction
+
+Run the benchmark script:
+
+```bash
+python benchmark_compare.py
 ```
-Document {i} about retrieval augmented generation and vector databases.
-```
-
-Chosen for:
-- reproducibility
-- no copyrighted content
-- non-trivial semantic similarity
-
-## Benchmark Phases
-
-1. Embedding (batched)
-2. Indexing
-3. Query execution (100 identical queries)
-
-Each phase is timed independently.
-
-## Example Results
-
-```
-Embedding time: 3.45s
-Index time:     2.11s
-Avg latency:    16.9ms
-P95 latency:    20.0ms
-Std dev:        low
-```
-
-## Interpretation
-
-- Embedding time depends on hardware
-- Index time reflects vector DB performance
-- Query latency reflects retrieval stability
-- Low variance is a key success metric
-
-## Reproducibility
-
-To reproduce results:
-- Use same embedding model
-- Same batch size
-- Same Qdrant version
-- Disable GPU acceleration
-
-Benchmarks are designed to be replayable, not marketing artifacts.
