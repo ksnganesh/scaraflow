@@ -178,6 +178,16 @@ store = QdrantVectorStore(
 
 Scaraflow includes a built-in benchmarking suite to verify infrastructure performance.
 
+**Latest Run (10,000 Documents, CPU):**
+
+| Framework | Indexing Time (s) | Avg Latency (ms) | P95 Latency (ms) | Std Dev (ms) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Scaraflow** | **9.91** | **112.96** | **165.32** | 47.31 |
+| LangChain | 13.06 | 134.25 | 189.02 | 39.40 |
+| LlamaIndex | 8.94 | 118.87 | 167.79 | 43.85 |
+
+*Embedding Time (common): ~34.9s (286 docs/s)*
+
 Benchmarks can be run using:
 
 ```bash
