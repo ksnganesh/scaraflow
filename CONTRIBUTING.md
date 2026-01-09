@@ -20,7 +20,7 @@ git clone https://github.com/your-org/scaraflow
 cd scaraflow
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install scaraflow
 ```
 
 ## Code Standards
