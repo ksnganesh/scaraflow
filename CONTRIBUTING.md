@@ -16,11 +16,11 @@ If you disagree with these principles, this may not be the right project.
 ## Development Setup
 
 ```bash
-git clone https://github.com/your-org/scaraflow
+git clone https://github.com/ksnganesh/scaraflow
 cd scaraflow
 python -m venv .venv
 source .venv/bin/activate
-pip install scaraflow
+pip install e.
 ```
 
 ## Code Standards
