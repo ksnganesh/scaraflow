@@ -1,8 +1,21 @@
-# Scaraflow
+<p align="center">
+  <img src="assets/logo.png" alt="Scaraflow Logo" width="420"/>
+</p>
+
+<h2 align="center">Scaraflow</h2>
+
+<p align="center">
+  Retrieval-first, deterministic RAG infrastructure for production systems
+</p>
+
+---
+
+## Scaraflow
 
 **Scaraflow** is a **retrieval-first RAG infrastructure** designed for **deterministic, production-grade Retrieval-Augmented Generation**.
 
-Scaraflow is not an agent framework, not a prompt playground, and not a demo SDK. It focuses on one thing and does it rigorously:
+Scaraflow is **not** an agent framework, **not** a prompt playground, and **not** a demo SDK.  
+It focuses on one thing and does it rigorously:
 
 > **Correct, explicit, and scalable retrieval for LLM systems**
 
@@ -10,8 +23,10 @@ Scaraflow is not an agent framework, not a prompt playground, and not a demo SDK
 
 ## Why Scaraflow
 
-Most RAG frameworks prioritize orchestration and abstraction. Scaraflow prioritizes **retrieval correctness, predictability, and streaming readiness**.
+Most RAG frameworks prioritize orchestration and abstraction.  
+Scaraflow prioritizes **retrieval correctness, predictability, and streaming readiness**.
 
+---
 ## Design Principles
 
 *   **Retrieval before generation**
@@ -43,13 +58,14 @@ scaraflow/
 pip install scaraflow
 ```
 
-*Note: Scaraflow depends on `qdrant-client` and standard scientific stack libraries.*
+*Note: Scaraflow depends on `qdrant-client` and the standard scientific Python stack.*
 
 ---
 
 ## Quick Start (Run in 30 Seconds)
 
-The fastest way to try Scaraflow is with the **In-Memory** setup. No Docker or external database required.
+The fastest way to try Scaraflow is with the **in-memory setup**.  
+No Docker or external database required.
 
 ### 1. Create a script `demo.py`
 
@@ -192,14 +208,11 @@ LLM is explicitly disabled. Using MockLLM.
 Indexing Time: 8.9368s
 [LlamaIndex] Avg: 118.87ms, P95: 167.79ms, Std: 43.85ms
 
-======================================================================
-Framework       | Index (s)  | Avg Lat (ms) | P95 (ms)   | Std (ms)  
-----------------------------------------------------------------------
-Scaraflow       | 9.9117     | 112.96       | 165.32     | 47.31     
-LangChain       | 13.0563    | 134.25       | 189.02     | 39.40     
-LlamaIndex      | 8.9368     | 118.87       | 167.79     | 43.85     
-======================================================================
-Embedding Time (common): 34.9234s
+Framework     | Index (s) | Avg Lat (ms) | P95 (ms) | Std (ms)
+-------------------------------------------------------------
+Scaraflow     | 9.9117    | 112.96       | 165.32   | 47.31
+LangChain     | 13.0563   | 134.25       | 189.02   | 39.40
+LlamaIndex    | 8.9368    | 118.87       | 167.79   | 43.85
 
 Scaraflow includes a built-in benchmarking suite to verify infrastructure performance.
 
