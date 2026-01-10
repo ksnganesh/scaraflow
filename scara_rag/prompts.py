@@ -7,7 +7,7 @@ def default_prompt(
     question: str,
 ) -> str:
     ctx = "\n".join(
-        f"[{b.doc_id} | score={b.score:.4f}]" for b in context
+        f"[{b.doc_id} | score={b.score:.4f}]\n{b.content}" for b in context
     )
 
     return f"""You are a retrieval-grounded assistant.

@@ -126,8 +126,7 @@ class QdrantVectorStore(VectorStore):
                 query_vector=query,
                 query_filter=filters,
                 limit=k,
-                # Ensure we get the payload if needed for QueryResult expansion later
-                with_payload=False, 
+                with_payload=True,
             )
         except AttributeError:
             # Fallback for newer Qdrant 'query_points' API if 'search' is deprecated in future versions
@@ -136,6 +135,7 @@ class QdrantVectorStore(VectorStore):
                 query=query,
                 query_filter=filters,
                 limit=k,
+                with_payload=True,
             )
             hits = result.points
 
@@ -143,7 +143,7 @@ class QdrantVectorStore(VectorStore):
             QueryResult(
                 doc_id=str(hit.id),
                 score=float(hit.score),
-                # Note: You can expand QueryResult to include hit.payload if needed
+                payload=hit.payload,
             )
             for hit in hits
         ]
