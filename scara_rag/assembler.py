@@ -17,7 +17,13 @@ def assemble_context(
         if r.score < min_score:
             continue
 
-        content = f"Document ID: {r.doc_id}"
+        # Extract content from payload, falling back to ID if not present
+        if r.payload and ('text' in r.payload or 'content' in r.payload):
+            raw_text = r.payload.get('text') or r.payload.get('content')
+            content = str(raw_text)
+        else:
+            content = f"Document ID: {r.doc_id}"
+
         block_size = len(content)
 
         if used_chars + block_size > max_chars:
