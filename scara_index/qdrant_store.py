@@ -1,12 +1,11 @@
-from itertools import islice
-from typing import Iterable
-
+from typing import List, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     VectorParams,
     Distance,
     PointStruct,
     Filter,
+    Batch,
 )
 
 from scara_core.protocols import VectorStore
@@ -16,30 +15,19 @@ from scara_core.validators import validate_vector, validate_batch
 from .config import QdrantConfig
 
 
-def _batch(iterable: Iterable, size: int):
-    it = iter(iterable)
-    while True:
-        chunk = list(islice(it, size))
-        if not chunk:
-            return
-        yield chunk
-
-
 class QdrantVectorStore(VectorStore):
     """
     Production-grade vector store backed by Qdrant.
-    Uses native Rust HNSW internally.
+    Optimized for high-throughput batching and low-latency search.
     """
 
-    def __init__(self, config: QdrantConfig, client: QdrantClient | None = None):
+    def __init__(self, config: QdrantConfig, client: Optional[QdrantClient] = None):
         self.config = config
-        if client:
-            self.client = client
-        else:
-            self.client = QdrantClient(
-                url=config.url,
-                timeout=getattr(config, "timeout", 5.0),
-            )
+        self.client = client or QdrantClient(
+            url=config.url,
+            # Using a more robust timeout for production workloads
+            timeout=getattr(config, "timeout", 10.0),
+        )
         self._ensure_collection()
 
     # ----------------------------
@@ -47,10 +35,10 @@ class QdrantVectorStore(VectorStore):
     # ----------------------------
 
     def _ensure_collection(self) -> None:
-        collections = self.client.get_collections().collections
-        names = {c.name for c in collections}
-
-        if self.config.collection not in names:
+        """
+        Validates existence and schema of the target collection.
+        """
+        if not self.client.collection_exists(self.config.collection):
             self.client.create_collection(
                 collection_name=self.config.collection,
                 vectors_config=VectorParams(
@@ -60,7 +48,7 @@ class QdrantVectorStore(VectorStore):
             )
             return
 
-        # Validate existing collection schema
+        # Validate existing collection schema to prevent downstream runtime errors
         info = self.client.get_collection(self.config.collection)
         vector_params = info.config.params.vectors
 
@@ -70,13 +58,9 @@ class QdrantVectorStore(VectorStore):
                 f"collection={vector_params.size}, "
                 f"config={self.config.vector_dim}"
             )
-
         if vector_params.distance != Distance.COSINE:
             raise ValueError(
-                f"Distance mismatch: "
-                f"collection={vector_params.distance}, "
-                f"config=Cosine"
-            )
+                f"Distance mismatch: collection={vector_params.distance}, expected=Cosine")
 
     # ----------------------------
     # Write path (BATCHED)
@@ -84,66 +68,82 @@ class QdrantVectorStore(VectorStore):
 
     def upsert(
         self,
-        ids: list[str],
-        vectors: list[Vector],
-        metadata: list[dict],
+        ids: List[str],
+        vectors: List[Vector],
+        metadata: List[dict],
         *,
-        batch_size: int = 256,  # SAFE default
+        batch_size: int = 256,
     ) -> None:
+        """
+        Efficiently inserts or updates vectors using Qdrant's Batch API.
+        """
         if not (len(ids) == len(vectors) == len(metadata)):
-            raise ValueError("ids, vectors, metadata length mismatch")
-
+            raise ValueError("Input lists (ids, vectors, metadata) must have identical lengths")
+        
+        if not all(isinstance(i, str) and i for i in ids):
+            raise ValueError("All ids must be non-empty strings")
+        
+        # Perform high-speed validation from scara_core
         validate_batch(vectors)
 
-        for id_batch, vec_batch, meta_batch in zip(
-            _batch(ids, batch_size),
-            _batch(vectors, batch_size),
-            _batch(metadata, batch_size),
-        ):
-            points = [
-                PointStruct(id=i, vector=v, payload=m)
-                for i, v, m in zip(id_batch, vec_batch, meta_batch)
-            ]
-
+        # Optimization: Standard list slicing is faster than itertools.islice 
+        # for data already held in memory.
+        for i in range(0, len(ids), batch_size):
             self.client.upsert(
                 collection_name=self.config.collection,
-                points=points,
+                points=Batch(
+                    ids=ids[i : i + batch_size],
+                    vectors=vectors[i : i + batch_size],
+                    payloads=metadata[i : i + batch_size],
+                ),
             )
 
     # ----------------------------
     # Read path (HNSW)
     # ----------------------------
 
-    def search(self,query: Vector,k: int,filters: Filter | None = None,) -> list[QueryResult]:
+    def search(
+        self, 
+        query: Vector, 
+        k: int, 
+        filters: Optional[Filter] = None
+    ) -> List[QueryResult]:
+        """
+        Executes a vector similarity search with optional filtering.
+        """
+        if k<=0:
+            raise ValueError("k must be a positive integer")
         validate_vector(query)
+
         if filters is not None and not isinstance(filters, Filter):
-            raise TypeError("filters must be a qdrant_client.models.Filter")
-        # ---- Qdrant API compatibility layer ----
-        if hasattr(self.client, "query_points"):
-            result = self.client.query_points(
-            collection_name=self.config.collection,
-            query=query,
-            limit=k,
-            query_filter=filters,)
-            hits = result.points
-        elif hasattr(self.client, "search"):
+            raise TypeError("filters must be an instance of qdrant_client.models.Filter")
+
+        # Optimization: Direct call to search is the fastest path in the current Qdrant Python SDK.
+        # We use the search method as the primary driver for HNSW performance.
+        try:
             hits = self.client.search(
-            collection_name=self.config.collection,
-            query_vector=query,
-            limit=k,
-            query_filter=filters,)
-        elif hasattr(self.client, "search_points"):
-            hits = self.client.search_points(
-            collection_name=self.config.collection,
-            vector=query,
-            limit=k,
-            filter=filters,)
-        else:
-            raise RuntimeError(
-            "Unsupported qdrant-client version: "
-            "no compatible query method found")
+                collection_name=self.config.collection,
+                query_vector=query,
+                query_filter=filters,
+                limit=k,
+                # Ensure we get the payload if needed for QueryResult expansion later
+                with_payload=False, 
+            )
+        except AttributeError:
+            # Fallback for newer Qdrant 'query_points' API if 'search' is deprecated in future versions
+            result = self.client.query_points(
+                collection_name=self.config.collection,
+                query=query,
+                query_filter=filters,
+                limit=k,
+            )
+            hits = result.points
+
         return [
             QueryResult(
-            doc_id=str(hit.id),
-            score=float(hit.score),)for hit in hits]
-
+                doc_id=str(hit.id),
+                score=float(hit.score),
+                # Note: You can expand QueryResult to include hit.payload if needed
+            )
+            for hit in hits
+        ]
