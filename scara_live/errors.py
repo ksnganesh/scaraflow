@@ -1,0 +1,2 @@
+class LiveRAGError(Exception):
+    pass
