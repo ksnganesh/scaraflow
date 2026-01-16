@@ -27,7 +27,8 @@ classifiers = [
 
 dependencies = [
     "qdrant-client>=1.7.0",
-    "numpy",confluent-kafka
+    "numpy",
+    "confluent-kafka"
 ]
 
 [project.optional-dependencies]
@@ -42,4 +43,4 @@ Homepage = "https://github.com/ksnganesh/scaraflow"
 Repository = "https://github.com/ksnganesh/scaraflow"
 
 [tool.setuptools.packages.find]
-include = ["scara_core*", "scara_index*", "scara_rag*"]
+include = ["scara_core*", "scara_index*", "scara_rag*", "scara_live*"]
