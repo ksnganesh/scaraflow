@@ -1,5 +1,6 @@
 import json
 import signal
+import uuid
 from typing import Callable, Dict, Any, Optional, List
 
 from confluent_kafka import Consumer, KafkaError, Message
@@ -59,10 +60,13 @@ class KafkaLiveAdapter:
         except Exception:
             return {}
 
+        unique_str = f"{msg.topic()}:{msg.partition()}:{msg.offset()}"
+        doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, unique_str))
+
         return {
             "text": payload.get("text"),
             "metadata": payload,
-            "doc_id": f"{msg.topic()}:{msg.partition()}:{msg.offset()}",
+            "doc_id": doc_id,
         }
 
     # ----------------------------
