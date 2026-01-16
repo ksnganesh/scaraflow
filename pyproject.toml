@@ -27,7 +27,7 @@ classifiers = [
 
 dependencies = [
     "qdrant-client>=1.7.0",
-    "numpy",
+    "numpy",confluent-kafka
 ]
 
 [project.optional-dependencies]
