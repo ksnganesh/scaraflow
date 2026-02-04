@@ -1,4 +1,4 @@
-from typing import Callable, Any
+from typing import Callable, Any, Optional
 from datetime import timedelta
 
 from scara_core.protocols import Embedder, LLM
@@ -26,7 +26,7 @@ class LiveRAGEngine:
         embedder: Embedder,
         store: Any,
         llm: LLM,
-        config: LiveConfig | None = None,
+        config: Optional[LiveConfig] = None,
         prompt_fn: Callable = default_prompt,
     ):
         self.config = config or LiveConfig()
@@ -43,10 +43,10 @@ class LiveRAGEngine:
         self,
         question: str,
         *,
-        window: timedelta | None = None,
+        window: Optional[timedelta] = None,
         top_k: int = 5,
         min_score: float = 0.0,
-        max_chars: int | None = None,
+        max_chars: Optional[int] = None,
     ) -> RAGResponse:
         if not question or not question.strip():
             return self._empty_response("Please provide a valid question.")
@@ -76,7 +76,21 @@ class LiveRAGEngine:
             )
 
         prompt = self.prompt_fn(context, question)
-        answer = self.llm(prompt)
+
+        try:
+            answer = self.llm(prompt)
+        except Exception as e:
+            return RAGResponse(
+                answer=f"[LLM FAILURE] {str(e)}",
+                context=context,
+                raw_results=results,
+                prompt=prompt,
+                metadata={
+                    "mode": "live",
+                    "window_seconds": effective_window.total_seconds(),
+                    "error": str(e),
+                },
+            )
 
         return RAGResponse(
             answer=answer,
@@ -94,7 +108,7 @@ class LiveRAGEngine:
         answer: str,
         *,
         raw_results=None,
-        window: timedelta | None = None,
+        window: Optional[timedelta] = None,
     ) -> RAGResponse:
         return RAGResponse(
             answer=answer,
