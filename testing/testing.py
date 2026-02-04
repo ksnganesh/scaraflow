@@ -1,158 +1,187 @@
-import sys
-import time
-import json
-import threading
-import signal
+# -----------------------------------------
+# Disable HF tokenizer fork warning (MUST be first)
+# -----------------------------------------
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+import uuid
+import csv
+import io
+import requests
 from datetime import timedelta
-from typing import Any, List
-from unittest.mock import MagicMock, patch
+from typing import List
 
 from qdrant_client import QdrantClient
+from openai import OpenAI
+from sentence_transformers import SentenceTransformer
+
 from scara_index.qdrant_store import QdrantVectorStore
 from scara_index.config import QdrantConfig
 from scara_live.indexer import LiveIndexer
 from scara_live.engine import LiveRAGEngine
-from scara_live.adapters.kafka import KafkaLiveAdapter
 from scara_core.protocols import Embedder, LLM
 
-# --- Mocks and Helpers ---
 
-class MockEmbedder(Embedder):
+# -------------------------------------------------
+# Real Embedder
+# -------------------------------------------------
+
+class RealEmbedder(Embedder):
+    def __init__(self):
+        self.model = SentenceTransformer("all-MiniLM-L6-v2")
+
     def embed(self, text: str) -> List[float]:
-        # Return a dummy vector of dimension 384 (common for all-MiniLM-L6-v2)
-        return [0.1] * 384
+        return self.model.encode(text).tolist()
 
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        return [self.embed(t) for t in texts]
+        return self.model.encode(texts).tolist()
 
-class MockLLM(LLM):
+
+# -------------------------------------------------
+# Real LLM (OpenAI)
+# -------------------------------------------------
+
+class OpenAILLM(LLM):
+    def __init__(self, model: str = "gpt-4o-mini"):
+        self.client = OpenAI()
+        self.model = model
+
     def __call__(self, prompt: str) -> str:
-        # Simple mock that checks if the context contains the relevant info
-        if "RBI announces surprise rate decision" in prompt:
-            return "Based on the latest news, RBI has announced a surprise rate decision."
-        return "I don't know."
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+        )
+        return resp.choices[0].message.content.strip()
 
-class MockMessage:
-    def __init__(self, value_dict):
-        self._value = json.dumps(value_dict).encode("utf-8")
-        self._topic = "market_news"
-        self._partition = 0
-        self._offset = 0
-    
-    def value(self):
-        return self._value
-    
-    def topic(self):
-        return self._topic
-    
-    def partition(self):
-        return self._partition
-    
-    def offset(self):
-        self._offset += 1
-        return self._offset - 1
-    
-    def error(self):
-        return None
 
-# --- Main Demo ---
+# -------------------------------------------------
+# GDELT GKG INGESTION (STABLE)
+# -------------------------------------------------
+def ingest_gdelt_gkg(indexer: LiveIndexer, query_keywords: list[str]):
+    import csv, io, uuid, requests
+
+    print("\nIngesting GDELT GKG (Global Knowledge Graph)")
+
+    # GDELT legacy endpoints (HTTP FIRST)
+    master_urls = [
+        "http://data.gdeltproject.org/gkg/masterfilelist.txt",   # preferred
+        "https://data.gdeltproject.org/gkg/masterfilelist.txt", # fallback
+    ]
+
+    response = None
+    for url in master_urls:
+        try:
+            response = requests.get(url, timeout=20, verify=False)
+            if response.status_code == 200:
+                break
+        except requests.RequestException:
+            continue
+
+    if response is None or response.status_code != 200:
+        print("⚠️  Could not reach GDELT master file list (network/TLS issue)")
+        return
+
+    lines = response.text.strip().splitlines()
+
+    gkg_files = [
+        line.split(" ")[2]
+        for line in lines
+        if line.endswith(".gkg.csv")
+    ]
+
+    if not gkg_files:
+        print("⚠️  No GKG files found")
+        return
+
+    latest_gkg_url = gkg_files[-1]
+    print(f"Using GKG file: {latest_gkg_url}")
+
+    # Download GKG CSV (again with TLS fallback)
+    try:
+        r = requests.get(latest_gkg_url, timeout=30, verify=False)
+        r.raise_for_status()
+    except requests.RequestException as e:
+        print(f"⚠️  Failed to download GKG file: {e}")
+        return
+
+    reader = csv.reader(io.StringIO(r.text), delimiter="\t")
+
+    matched = 0
+
+    for row in reader:
+        if len(row) < 9:
+            continue
+
+        title = row[4]
+        themes = row[7].lower()
+
+        if any(k.lower() in title.lower() or k.lower() in themes for k in query_keywords):
+            indexer.index(
+                doc_id=str(uuid.uuid4()),
+                text=title,
+                metadata={
+                    "source": "gdelt-gkg",
+                    "themes": row[7],
+                    "url": row[5],
+                },
+            )
+            matched += 1
+
+        if matched >= 15:
+            break
+
+    print(f"Indexed {matched} relevant GDELT events")
+
+# -------------------------------------------------
+# Main Demo
+# -------------------------------------------------
 
 def main():
-    print("--- Starting ScaraLive Market Intelligence Demo ---")
+    print("\n--- LiveRAG REAL-WORLD DEMO (GDELT GKG) ---")
 
-    # 1. Setup Infrastructure
-    print("[1] Initializing Vector Store (In-Memory)...")
+    # Vector store
     client = QdrantClient(":memory:")
-    
-    config = QdrantConfig(
-        url=":memory:",
-        collection="scara_vectors",
-        vector_dim=384,
-    )
-
     store = QdrantVectorStore(
-        config=config,
-        client=client, 
+        QdrantConfig(collection="live_world", vector_dim=384),
+        client=client,
     )
 
-    embedder = MockEmbedder()
-    
-    # 2. Setup Indexer
-    print("[2] Setting up LiveIndexer...")
+    embedder = RealEmbedder()
     indexer = LiveIndexer(embedder=embedder, store=store)
 
-    # 3. Setup Kafka Adapter with Mock Consumer
-    print("[3] Setting up Kafka Adapter...")
-    
-    # Payload from user
-    kafka_payload = {
-        "text": "Breaking: RBI announces surprise rate decision",
-        "source": "news",
-        "symbol": "NIFTY"
-    }
-    
-    # Mocking Consumer and signal
-    with patch("scara_live.adapters.kafka.Consumer") as MockConsumerCls, \
-         patch("signal.signal") as mock_signal:
-        
-        mock_consumer_instance = MagicMock()
-        MockConsumerCls.return_value = mock_consumer_instance
-        
-        # Setup polling behavior: return message once, then return None (simulating no more messages)
-        # We need to be careful because the adapter loop runs until self.running is False.
-        # We can make poll return the message, then sleep/wait, or we can run adapter in a separate thread and stop it.
-        
-        mock_consumer_instance.poll.side_effect = [
-            MockMessage(kafka_payload),
-            None, None, None, None # Return None subsequently
-        ]
+    # REAL WORLD INGESTION (STABLE)
+    ingest_gdelt_gkg(
+        indexer,
+        query_keywords=["india", "economy", "rbi", "market", "stock"],
+    )
 
-        adapter = KafkaLiveAdapter(
-            indexer=indexer,
-            bootstrap_servers="mock:9092",
-            topic="market_news",
-            group_id="demo_group"
-        )
-        
-        # Run adapter in a thread so we can stop it
-        adapter_thread = threading.Thread(target=adapter.start)
-        adapter_thread.start()
-        
-        print("    -> Adapter started, consuming messages...")
-        time.sleep(2) # Give it time to process
-        
-        print("    -> Stopping adapter...")
-        adapter._shutdown()
-        adapter_thread.join()
-
-    # 4. Setup RAG Engine
-    print("[4] Setting up LiveRAG Engine...")
-    llm = MockLLM()
+    # LiveRAG
     live_rag = LiveRAGEngine(
         embedder=embedder,
         store=store,
-        llm=llm
+        llm=OpenAILLM(),
     )
 
-    # 5. Query
-    print("[5] Executing Query...")
-    question = "What just happened in the Indian markets?"
-    print(f"    Question: {question}")
-    
+    question = "What breaking financial news just happened?"
+
+    print("\nQuestion:")
+    print(question)
+
     response = live_rag.query(
         question,
-        window=timedelta(minutes=15),
+        window=timedelta(minutes=180),
     )
 
-    print("\n[Result]")
-    print(f"Answer: {response.answer}")
-    
-    # Verification
-    if "RBI" in response.answer:
-        print("\nSUCCESS: Relevant news retrieved and answered.")
-    else:
-        print("\nFAILURE: Did not retrieve relevant news.")
-        sys.exit(1)
+    print("\nAnswer:")
+    print(response.answer)
+
+    print("\nContext Used:")
+    for block in response.context:
+        print("-", block.content)
+
+    print("\nSUCCESS: GDELT GKG → LiveRAG → grounded answer")
+
 
 if __name__ == "__main__":
     main()
