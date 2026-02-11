@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 from typing import List
 
-from qdrant_client.models import Filter, FieldCondition, Range
-
 from scara_core.protocols import Embedder
+from scara_core.validators import validate_vector
 from scara_core.types import QueryResult
 from scara_index.qdrant_store import QdrantVectorStore
+from scara_index.filters import range_gte
 from .policies import LiveRetrievalPolicy
 
 
@@ -13,8 +13,8 @@ class LiveRetriever:
     """
     Time-windowed vector retrieval with optional recency-aware re-ranking.
 
-    This component is backend-agnostic at the API level and does not
-    leak Qdrant-specific types beyond scara-index.
+    This component is backend-agnostic at the API level and uses
+    scara-index filter helpers for backend-specific implementations.
     """
 
     __slots__ = ("embedder", "store", "timestamp_field")
@@ -41,17 +41,11 @@ class LiveRetriever:
         start_ts = now_ts - window_seconds
 
         # 2. Build time filter
-        time_filter = Filter(
-            must=[
-                FieldCondition(
-                    key=self.timestamp_field,
-                    range=Range(gte=start_ts),
-                )
-            ]
-        )
+        time_filter = range_gte(self.timestamp_field, start_ts)
 
         # 3. Embed query and search
         q_vec = self.embedder.embed(query)
+        validate_vector(q_vec)
 
         results: List[QueryResult] = self.store.search(
             query=q_vec,
@@ -65,6 +59,7 @@ class LiveRetriever:
                 results=results,
                 now_ts=now_ts,
                 window_seconds=window_seconds,
+                weights=policy.recency_weights,
             )
 
         return results
@@ -75,6 +70,7 @@ class LiveRetriever:
         results: List[QueryResult],
         now_ts: float,
         window_seconds: float,
+        weights: tuple[float, float] | None = None,
     ) -> List[QueryResult]:
         """
         Combine semantic similarity with recency using a linear weighting model.
@@ -85,12 +81,23 @@ class LiveRetriever:
         Recency score is normalized to [0.0, 1.0] within the window.
         """
 
-        SEMANTIC_WEIGHT = 0.7
-        RECENCY_WEIGHT = 0.3
+        if weights is None:
+            semantic_weight, recency_weight = 0.7, 0.3
+        else:
+            semantic_weight, recency_weight = weights
+
+        total_weight = semantic_weight + recency_weight
+        if total_weight <= 0:
+            return results
+        semantic_weight = semantic_weight / total_weight
+        recency_weight = recency_weight / total_weight
 
         def combined_score(r: QueryResult) -> float:
             payload = r.payload or {}
-            doc_ts = payload.get(self.timestamp_field, 0.0)
+            try:
+                doc_ts = float(payload.get(self.timestamp_field, 0.0))
+            except (TypeError, ValueError):
+                doc_ts = 0.0
 
             # Age in seconds
             age = max(0.0, now_ts - float(doc_ts))
@@ -98,6 +105,6 @@ class LiveRetriever:
             # Normalize recency within window
             recency_score = max(0.0, 1.0 - (age / window_seconds))
 
-            return (r.score * SEMANTIC_WEIGHT) + (recency_score * RECENCY_WEIGHT)
+            return (r.score * semantic_weight) + (recency_score * recency_weight)
 
         return sorted(results, key=combined_score, reverse=True)

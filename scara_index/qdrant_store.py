@@ -11,6 +11,7 @@ from qdrant_client.models import (
 from scara_core.protocols import VectorStore
 from scara_core.types import Vector, QueryResult
 from scara_core.validators import validate_vector, validate_batch
+from scara_core.utils import generate_id
 
 from .config import QdrantConfig
 
@@ -68,15 +69,19 @@ class QdrantVectorStore(VectorStore):
 
     def upsert(
         self,
-        ids: List[str],
+        *,
         vectors: List[Vector],
         metadata: List[dict],
-        *,
+        ids: Optional[List[str]] = None,
         batch_size: int = 256,
-    ) -> None:
+    ) -> List[str]:
         """
         Efficiently inserts or updates vectors using Qdrant's Batch API.
         """
+        if not (len(vectors) == len(metadata)):
+            raise ValueError("Input lists (vectors, metadata) must have identical lengths")
+        if ids is None:
+            ids = [generate_id() for _ in vectors]
         if not (len(ids) == len(vectors) == len(metadata)):
             raise ValueError("Input lists (ids, vectors, metadata) must have identical lengths")
         
@@ -97,6 +102,7 @@ class QdrantVectorStore(VectorStore):
                     payloads=metadata[i : i + batch_size],
                 ),
             )
+        return ids
 
     # ----------------------------
     # Read path (HNSW)

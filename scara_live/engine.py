@@ -1,4 +1,4 @@
-from typing import Callable, Any
+from typing import Callable, Any, Optional
 from datetime import timedelta
 
 from scara_core.protocols import Embedder, LLM
@@ -26,7 +26,7 @@ class LiveRAGEngine:
         embedder: Embedder,
         store: Any,
         llm: LLM,
-        config: LiveConfig | None = None,
+        config: Optional[LiveConfig] = None,
         prompt_fn: Callable = default_prompt,
     ):
         self.config = config or LiveConfig()
@@ -43,29 +43,49 @@ class LiveRAGEngine:
         self,
         question: str,
         *,
-        window: timedelta | None = None,
-        top_k: int = 5,
-        min_score: float = 0.0,
-        max_chars: int | None = None,
+        policy: Optional[LiveRetrievalPolicy] = None,
+        window: Optional[timedelta] = None,
+        top_k: Optional[int] = None,
+        min_score: Optional[float] = None,
+        max_chars: Optional[int] = None,
     ) -> RAGResponse:
         if not question or not question.strip():
             return self._empty_response("Please provide a valid question.")
 
-        effective_window = window or self.config.default_window
-        effective_max_chars = max_chars or self.config.max_context_chars
+        if policy is None:
+            effective_window = window if window is not None else self.config.default_window
+            policy = LiveRetrievalPolicy(
+                window=effective_window,
+                top_k=top_k if top_k is not None else 5,
+                min_score=min_score if min_score is not None else 0.0,
+                max_context_chars=max_chars,
+            )
+        else:
+            effective_window = window if window is not None else policy.window
+            policy = LiveRetrievalPolicy(
+                window=effective_window,
+                top_k=top_k if top_k is not None else policy.top_k,
+                recency_boost=policy.recency_boost,
+                min_score=min_score if min_score is not None else policy.min_score,
+                max_context_blocks=policy.max_context_blocks,
+                max_context_chars=max_chars if max_chars is not None else policy.max_context_chars,
+                recency_weights=policy.recency_weights,
+            )
 
-        policy = LiveRetrievalPolicy(
-            window=effective_window,
-            top_k=top_k,
+        effective_max_chars = (
+            policy.max_context_chars
+            if policy.max_context_chars is not None
+            else self.config.max_context_chars
         )
+        max_blocks = policy.max_context_blocks or policy.top_k
 
         results = self.retriever.retrieve(question, policy)
 
         try:
             context = assemble_context(
                 results=results,
-                min_score=min_score,
-                max_blocks=top_k,
+                min_score=policy.min_score,
+                max_blocks=max_blocks,
                 max_chars=effective_max_chars,
             )
         except EmptyContextError:
@@ -76,7 +96,21 @@ class LiveRAGEngine:
             )
 
         prompt = self.prompt_fn(context, question)
-        answer = self.llm(prompt)
+
+        try:
+            answer = self.llm(prompt)
+        except Exception as e:
+            return RAGResponse(
+                answer=f"[LLM FAILURE] {str(e)}",
+                context=context,
+                raw_results=results,
+                prompt=prompt,
+                metadata={
+                    "mode": "live",
+                    "window_seconds": effective_window.total_seconds(),
+                    "error": str(e),
+                },
+            )
 
         return RAGResponse(
             answer=answer,
@@ -94,7 +128,7 @@ class LiveRAGEngine:
         answer: str,
         *,
         raw_results=None,
-        window: timedelta | None = None,
+        window: Optional[timedelta] = None,
     ) -> RAGResponse:
         return RAGResponse(
             answer=answer,

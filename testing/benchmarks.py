@@ -4,7 +4,6 @@ import warnings
 from typing import List
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
-import uuid
 # Scaraflow imports
 from scara_index.qdrant_store import QdrantVectorStore
 from scara_index.config import QdrantConfig
@@ -92,7 +91,6 @@ print("[Scaraflow] Indexing documents...")
 
 t0 = time.time()
 store.upsert(
-    ids=[uuid.uuid4().hex for _ in range(NUM_DOCS)],
     vectors=embeddings.tolist(),
     metadata=[{"text": t} for t in texts],
 )

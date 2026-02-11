@@ -24,8 +24,8 @@ class LiveIndexer:
     def index(
         self,
         *,
-        doc_id: str,
         text: str,
+        doc_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         timestamp: Optional[datetime] = None,
     ) -> None:
@@ -34,6 +34,8 @@ class LiveIndexer:
         """
         if not text or not text.strip():
             return
+        if doc_id is not None and (not isinstance(doc_id, str) or not doc_id.strip()):
+            raise ValueError("doc_id must be a non-empty string when provided")
 
         ts = timestamp or datetime.now(timezone.utc)
 
@@ -45,8 +47,9 @@ class LiveIndexer:
 
         vector = self.embedder.embed(text)
 
+        ids = [doc_id] if doc_id is not None else None
         self.store.upsert(
-            ids=[doc_id],
+            ids=ids,
             vectors=[vector],
             metadata=[payload],
         )
@@ -54,18 +57,31 @@ class LiveIndexer:
     def index_batch(
         self,
         *,
-        doc_ids: List[str],
         texts: List[str],
+        doc_ids: Optional[List[str]] = None,
         metadatas: Optional[List[Dict[str, Any]]] = None,
+        timestamps: Optional[List[datetime]] = None,
     ) -> None:
         """
         Optimized batch indexing to reduce network overhead.
         """
-        if len(doc_ids) != len(texts):
+        if doc_ids is not None and len(doc_ids) != len(texts):
             raise ValueError("doc_ids and texts must have the same length")
+        if doc_ids is not None and not all(isinstance(i, str) and i for i in doc_ids):
+            raise ValueError("All doc_ids must be non-empty strings")
+        if metadatas is not None and len(metadatas) != len(texts):
+            raise ValueError("metadatas must be the same length as texts")
+        if timestamps is not None and len(timestamps) != len(texts):
+            raise ValueError("timestamps must be the same length as texts")
 
-        ts_value = datetime.now(timezone.utc).timestamp()
         metadatas = metadatas or [{} for _ in texts]
+        if timestamps is None:
+            ts_values = [datetime.now(timezone.utc).timestamp() for _ in texts]
+        else:
+            ts_values = [
+                (ts if ts.tzinfo is not None else ts.replace(tzinfo=timezone.utc)).timestamp()
+                for ts in timestamps
+            ]
 
         try:
             vectors = self.embedder.embed_batch(texts)
@@ -74,7 +90,7 @@ class LiveIndexer:
 
         payloads = [
             {**meta, self.timestamp_field: ts_value, "text": text}
-            for meta, text in zip(metadatas, texts)
+            for meta, text, ts_value in zip(metadatas, texts, ts_values)
         ]
 
         self.store.upsert(

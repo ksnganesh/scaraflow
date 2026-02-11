@@ -64,11 +64,47 @@ scaraflow/
 
 ---
 
+## Query Flow (Sequence Diagram)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant RAG as "RAGEngine"
+    participant Emb as "Embedder"
+    participant VS as "VectorStore (Qdrant)"
+    participant RR as "Reranker"
+    participant CTX as "Context Assembler"
+    participant LLM as "LLM Callable"
+
+    User->>RAG: query(question, policy, filters)
+    RAG->>Emb: embed(question)
+    Emb-->>RAG: vector
+    RAG->>VS: search(vector, k, filters)
+    VS-->>RAG: raw_results
+    RAG->>RR: rerank(question, raw_results)
+    RR-->>RAG: ranked_results
+    RAG->>CTX: assemble_context(ranked_results, policy)
+    CTX-->>RAG: context blocks
+    alt not answerable
+        RAG-->>User: "I don't know."
+    else answerable
+        RAG->>RAG: build prompt
+        RAG->>LLM: llm(prompt)
+        LLM-->>RAG: answer
+        RAG-->>User: RAGResponse(answer, context, raw_results, prompt, metadata)
+    end
+```
+
+---
+
 ## Installation
 
 ```bash
 pip install scaraflow
 ```
+
+User guide:
+- `docs/USER_GUIDE.md`
 
 **Dependencies**
 - `qdrant-client`
@@ -84,7 +120,6 @@ pip install scaraflow
 Ideal for testing and prototyping without external infrastructure.
 
 ```python
-import uuid
 from qdrant_client import QdrantClient
 from sentence_transformers import SentenceTransformer
 from scara_index.qdrant_store import QdrantVectorStore
@@ -119,11 +154,9 @@ documents = [
     "It prioritizes deterministic behavior.",
     "Qdrant is the reference backend.",
 ]
-ids = [str(uuid.uuid4()) for _ in documents]
 vectors = model.encode(documents).tolist()
 
 store.upsert(
-    ids=ids,
     vectors=vectors,
     metadata=[{"text": d} for d in documents],
 )
@@ -263,14 +296,16 @@ def query_rag(request: QueryRequest):
 
 ## Benchmarks
 
+Latest run (2026-02-09, in-memory Qdrant, `all-MiniLM-L6-v2`, 10k docs, 100 queries):
+
 ```
 Documents        : 10000
 Queries          : 100
-Embedding Time   : 6.47s
-Indexing Time    : 0.34s
-Avg Latency      : 7.92 ms
-P95 Latency      : 11.03 ms
-Latency Std Dev  : 1.24 ms
+Embedding Time   : 4.07s
+Indexing Time    : 0.36s
+Avg Latency      : 15.06 ms
+P95 Latency      : 17.75 ms
+Latency Std Dev  : 2.71 ms
 ```
 
 Benchmarks can be run using:

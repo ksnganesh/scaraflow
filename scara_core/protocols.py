@@ -21,10 +21,11 @@ class VectorStore(Protocol):
 
     def upsert(
         self,
-        ids: list[str],
+        *,
         vectors: list[Vector],
         metadata: list[dict],
-    ) -> None: ...
+        ids: list[str] | None = None,
+    ) -> list[str]: ...
 
     def search(
         self,
